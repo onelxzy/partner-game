@@ -839,6 +839,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         group_id, sender_qq, _ = self._extract_ctx(kwargs)
         if not group_id or not sender_qq: return False, "Not in group", 0
 
+        prob_force = int(self.config.partner_game.force_marry_probability * 100)
+        prob_rob = int(self.config.partner_game.rob_wife_probability * 100)
         help_text = (
             "💖 抽老婆插件功能指南 💖\n"
             "1. 【/今日老婆】或【抽老婆】：随机抽取今日老婆。\n"
@@ -847,7 +849,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             "4. 【/抢老婆 @某人】：当一回黄毛，概率抢走别人的老婆！\n"
             "5. 【/我的伴侣】：查看自己当前的伴侣是谁。\n"
             "6. 【/离婚】：老公主动解除关系。\n"
-            "7. 【/甩掉 @某人】：老婆主动甩掉现任老公。"
+            "7. 【/甩掉 @某人】：老婆主动甩掉现任老公。\n"
+            "---\n"
+            f"🎯 当前强娶成功率: {prob_force}% | 抢老婆成功率: {prob_rob}%"
         )
         await self._send_text_at(group_id, sender_qq, help_text)
         return True, "help", 2
