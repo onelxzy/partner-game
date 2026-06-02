@@ -108,6 +108,19 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         return None
 
+    def _is_explicit_command(self, kwargs: dict) -> bool:
+        msg_text = ""
+        msg_obj = kwargs.get("message")
+        if isinstance(msg_obj, dict):
+            msg_text = str(msg_obj.get("processed_plain_text") or "")
+            if not msg_text:
+                raw_list = msg_obj.get("raw_message")
+                if isinstance(raw_list, list):
+                    msg_text = "".join([str(seg.get("data", {}).get("text", "")) for seg in raw_list if isinstance(seg, dict) and seg.get("type") == "text"])
+        if not msg_text:
+            msg_text = str(kwargs.get("raw_message", ""))
+        return msg_text.strip().startswith("/")
+
     async def _resolve_bot_qq(self) -> Optional[str]:
         if self._bot_qq_cache:
             return self._bot_qq_cache
@@ -273,15 +286,16 @@ class PartnerGamePlugin(MaiBotPlugin):
         no_limit_users = [str(x) for x in (cfg.no_limit_users or [])]
         daily = self._store.data.setdefault("daily", {})
 
-        # 今日已抽：复读，或是已经被抽
-        if sender_qq not in no_limit_users:
-            marriage = self._get_user_marriage(group_id, sender_qq)
-            if marriage:
-                if marriage["role"] == "wife":
-                    partner_nick = marriage["partner_nick"]
-                    await self._send_text_at(group_id, sender_qq, f"你已经是【{partner_nick}】的伴侣啦，不能再开后宫了！(可以使用 /甩掉 解除关系)")
-                    return True, "already_wife", 2
+        # 首先不论是否白名单，强制校验不能开后宫
+        marriage = self._get_user_marriage(group_id, sender_qq)
+        if marriage:
+            if marriage["role"] == "wife":
+                partner_nick = marriage["partner_nick"]
+                await self._send_text_at(group_id, sender_qq, f"你已经是【{partner_nick}】的伴侣啦，不能再开后宫了！(可以使用 /甩掉 解除关系)")
+                return True, "already_wife", 2
 
+        # 每日已抽：复读，或是已经被抽（白名单豁免）
+        if sender_qq not in no_limit_users:
             rec = daily.get(group_id, {}).get(sender_qq)
             if isinstance(rec, dict) and rec.get("date") == today:
                 await self._send_wife_message(
@@ -400,7 +414,7 @@ class PartnerGamePlugin(MaiBotPlugin):
     @Command(
         "partner_game_divorce",
         description="清空今日老婆记录，可重新抽取（每日限一次）",
-        pattern=r"^/离婚$",
+        pattern=r"^\s*(?:/离婚|离婚)(?:\s+|\[CQ:at|@|\d|$).*",
         aliases=["离婚"]
     )
     async def handle_divorce(self, stream_id: str = "", **kwargs):
@@ -544,6 +558,8 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         target_qq = self._extract_at_qq(kwargs)
         if not target_qq:
+            if not self._is_explicit_command(kwargs):
+                return False, "Not a command", 0
             self.ctx.logger.warning(f"marry command could not extract QQ. kwargs: {kwargs}")
             await self._send_avatar_msg(group_id, "未识别到有效的 @ 目标！请确保使用真实的 @ 功能，或者直接输入对方的 QQ 号。", sender_qq, "")
             return True, "No target error", 2
@@ -560,10 +576,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, "你们已经是伴侣了哦，不需要再重复绑定啦~", sender_qq, "")
             return True, "Already partners", 2
             
-        if sender_qq not in no_limit_users:
-            if sender_marriage:
-                await self._send_avatar_msg(group_id, "你今天已经有伴侣了，不能再娶别人啦！", sender_qq, "")
-                return True, "Has wife", 2
+        if sender_marriage:
+            await self._send_avatar_msg(group_id, "你今天已经有伴侣了，不能再娶别人啦！", sender_qq, "")
+            return True, "Has wife", 2
 
         if self._get_user_marriage(group_id, target_qq):
             await self._send_avatar_msg(group_id, "对方今天已经名花有主啦，放弃吧！", sender_qq, "")
@@ -620,6 +635,8 @@ class PartnerGamePlugin(MaiBotPlugin):
         import random, time
         target_qq = self._extract_at_qq(kwargs)
         if not target_qq:
+            if not self._is_explicit_command(kwargs):
+                return False, "Not a command", 0
             self.ctx.logger.warning(f"force_marry command could not extract QQ. kwargs: {kwargs}")
             await self._send_avatar_msg(group_id, "未识别到有效的 @ 目标！请确保使用真实的 @ 功能，或者直接输入对方的 QQ 号。", sender_qq, "")
             return True, "No target error", 2
@@ -636,10 +653,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, "你们已经是伴侣了哦，不需要再重复绑定啦~", sender_qq, "")
             return True, "Already partners", 2
             
-        if sender_qq not in no_limit_users:
-            if sender_marriage:
-                await self._send_avatar_msg(group_id, "你今天已经有伴侣了，休想开后宫！", sender_qq, "")
-                return True, "Has wife", 2
+        if sender_marriage:
+            await self._send_avatar_msg(group_id, "你今天已经有伴侣了，休想开后宫！", sender_qq, "")
+            return True, "Has wife", 2
 
         if self._get_user_marriage(group_id, target_qq):
             await self._send_avatar_msg(group_id, "对方今天已经名花有主啦，强娶失败！", sender_qq, "")
@@ -714,6 +730,8 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         target_qq = self._extract_at_qq(kwargs)
         if not target_qq:
+            if not self._is_explicit_command(kwargs):
+                return False, "Not a command", 0
             self.ctx.logger.warning(f"dump_partner command could not extract QQ. kwargs: {kwargs}")
             await self._send_avatar_msg(group_id, "未识别到有效的 @ 目标！请确保使用真实的 @ 功能，或者直接输入对方的 QQ 号。", sender_qq, "")
             return True, "No target error", 2
@@ -771,6 +789,8 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         target_qq = self._extract_at_qq(kwargs)
         if not target_qq:
+            if not self._is_explicit_command(kwargs):
+                return False, "Not a command", 0
             await self._send_avatar_msg(group_id, "未识别到有效的 @ 目标！请确保使用了真实的 @ 或输入了QQ号。", sender_qq, "")
             return True, "No target error", 2
             
@@ -786,10 +806,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             await self._send_avatar_msg(group_id, "连自己的伴侣都不放过吗？你们早就在一起啦！", sender_qq, "")
             return True, "Rob own partner", 2
             
-        if sender_qq not in no_limit_users:
-            if sender_marriage:
-                await self._send_avatar_msg(group_id, "你已经有伴侣了，休想当黄毛！", sender_qq, "")
-                return True, "Has wife", 2
+        if sender_marriage:
+            await self._send_avatar_msg(group_id, "你已经有伴侣了，休想当黄毛！", sender_qq, "")
+            return True, "Has wife", 2
 
         target_marriage = self._get_user_marriage(group_id, target_qq)
         if not target_marriage or target_marriage["role"] != "husband":
