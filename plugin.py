@@ -579,7 +579,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Has wife", 2
 
         if self._get_user_marriage(group_id, target_qq):
-            await self._send_avatar_msg(group_id, "对方今天已经名花有主啦，放弃吧！", sender_qq, "")
+            await self._send_avatar_msg(group_id, "对方今天已经名花有主啦！如果你非要硬来，可以尝试使用【/抢老婆 @对方】！", sender_qq, "")
             return True, "Target taken", 2
             
         # Get target info
@@ -658,7 +658,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Has wife", 2
 
         if self._get_user_marriage(group_id, target_qq):
-            await self._send_avatar_msg(group_id, "对方今天已经名花有主啦，强娶失败！", sender_qq, "")
+            await self._send_avatar_msg(group_id, "对方今天已经名花有主啦，强娶失败！想硬来的话，可以尝试使用【/抢老婆 @对方】！", sender_qq, "")
             return True, "Target taken", 2
             
         prob = cfg.force_marry_probability
@@ -813,25 +813,33 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Has wife", 2
 
         target_marriage = self._get_user_marriage(group_id, target_qq)
-        if not target_marriage or target_marriage["role"] != "husband":
+        if not target_marriage:
             await self._send_avatar_msg(group_id, "对方还是个单身狗，你抢个寂寞啊！", sender_qq, "")
             return True, "Target single", 2
             
+        if target_marriage["role"] == "husband":
+            husband_qq = target_qq
+            wife_qq = str(target_marriage["partner_uid"])
+            wife_nick = str(target_marriage["partner_nick"])
+        else:
+            wife_qq = target_qq
+            husband_qq = str(target_marriage["partner_uid"])
+            wife_nick = await self._get_member_nick(group_id, wife_qq)
+            
+        husband_nick = await self._get_member_nick(group_id, husband_qq)
+            
         prob = cfg.rob_wife_probability
         import random
-        target_nick = await self._get_member_nick(group_id, target_qq)
-        wife_qq = target_marriage["partner_uid"]
-        wife_nick = target_marriage["partner_nick"]
         
         if random.random() < prob:
             from .utils import today_str
             today = today_str(cfg.tz_offset_hours)
             daily = self._store.data.setdefault("daily", {})
             
-            # 删除原目标的老婆记录
-            if target_qq in daily.get(group_id, {}):
-                wife_card = daily[group_id][target_qq].get("wife_card", "")
-                del daily[group_id][target_qq]
+            # 删除原老公的老婆记录
+            if husband_qq in daily.get(group_id, {}):
+                wife_card = daily[group_id][husband_qq].get("wife_card", "")
+                del daily[group_id][husband_qq]
             else:
                 wife_card = ""
                 
@@ -847,10 +855,10 @@ class PartnerGamePlugin(MaiBotPlugin):
             
             if not sender_nick:
                 sender_nick = await self._get_member_nick(group_id, sender_qq)
-            await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{target_nick}({target_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
+            await self._send_avatar_msg(group_id, f"黄毛出现！【{sender_nick}({sender_qq})】拔剑而出，成功从【{husband_nick}({husband_qq})】手中抢走了TA的伴侣【{wife_nick}({wife_qq})】！", sender_qq, wife_qq)
         else:
             self._set_penalty(group_id, sender_qq, "rob_wife", 300)
-            await self._send_avatar_msg(group_id, f"抢老婆失败！【{target_nick}({target_qq})】誓死守卫了爱情，将你一脚踢飞，你进入了5分钟的自闭冷却期。", sender_qq, target_qq)
+            await self._send_avatar_msg(group_id, f"抢夺失败！【{husband_nick}({husband_qq})】誓死守卫了爱情，将你一脚踢飞，你进入了5分钟的自闭冷却期。", sender_qq, husband_qq)
             
         return True, "Rob Wife Done", 2
 
