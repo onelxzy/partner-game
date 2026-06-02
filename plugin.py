@@ -260,8 +260,7 @@ class PartnerGamePlugin(MaiBotPlugin):
     @Command(
         "partner_game",
         description="随机抽取今日老婆",
-        pattern=r"^(?:/今日老婆|今日老婆|/抽老婆|抽老婆)$",
-        aliases=["今日老婆", "/抽老婆", "抽老婆", "老婆"]
+        pattern=r"^\s*(?:/今日老婆|今日老婆|/抽老婆|抽老婆|/老婆|老婆)$"
     )
     async def handle_partner_game(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
@@ -414,8 +413,7 @@ class PartnerGamePlugin(MaiBotPlugin):
     @Command(
         "partner_game_divorce",
         description="清空今日老婆记录，可重新抽取（每日限一次）",
-        pattern=r"^\s*(?:/离婚|离婚)(?:\s+|\[CQ:at|@|\d|$).*",
-        aliases=["离婚"]
+        pattern=r"^\s*(?:/离婚|离婚)(?:\s+|\[CQ:at|@|\d|$).*"
     )
     async def handle_divorce(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
@@ -541,7 +539,7 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         return False, "No match", 0
 
-    @Command("marry", pattern=r"^\s*(?:/娶|娶).*", aliases=["/娶", "娶"])
+    @Command("marry", pattern=r"^\s*(?:/娶|娶).*")
     async def handle_marry(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
@@ -617,7 +615,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         
         return True, "Proposed", 2
 
-    @Command("force_marry", pattern=r"^\s*(?:/强娶|强娶).*", aliases=["/强娶", "强娶"])
+    @Command("force_marry", pattern=r"^\s*(?:/强娶|强娶).*")
     async def handle_force_marry(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
@@ -629,7 +627,9 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         is_cd, rem = self._check_cooldown(group_id, sender_qq, "force_marry")
         if is_cd:
-            await self._send_avatar_msg(group_id, f"你刚刚遭遇了挫折，还在受罚冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            cd_cfg = int(self.config.partner_game.cooldown_seconds or 60)
+            msg = "刚刚遭遇了挫折，还在自闭受罚中" if rem > cd_cfg else "强娶技能冷却中"
+            await self._send_avatar_msg(group_id, f"{msg}，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
 
         import random, time
@@ -713,7 +713,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         await self._send_avatar_msg(group_id, text, sender_qq, partner_uid)
         return True, "Has partner", 2
 
-    @Command("dump_partner", pattern=r"^\s*(?:/甩掉|甩掉).*", aliases=["/甩掉", "甩掉"])
+    @Command("dump_partner", pattern=r"^\s*(?:/甩掉|甩掉).*")
     async def handle_dump(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
@@ -772,7 +772,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             
         return True, "Dumped", 2
 
-    @Command("rob_wife", pattern=r"^\s*(?:/抢老婆|抢老婆).*", aliases=["/抢老婆", "抢老婆"])
+    @Command("rob_wife", pattern=r"^\s*(?:/抢老婆|抢老婆).*")
     async def handle_rob_wife(self, stream_id: str = "", **kwargs):
         if not self.config.plugin.enabled:
             return False, "Plugin Disabled", 0
@@ -784,7 +784,9 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         is_cd, rem = self._check_cooldown(group_id, sender_qq, "rob_wife")
         if is_cd:
-            await self._send_avatar_msg(group_id, f"你刚刚遭遇了挫折，还在受罚冷却中，请等待 {rem} 秒后再试~", sender_qq, "")
+            cd_cfg = int(self.config.partner_game.cooldown_seconds or 60)
+            msg = "刚刚遭遇了挫折，还在自闭受罚中" if rem > cd_cfg else "抢夺技能冷却中"
+            await self._send_avatar_msg(group_id, f"{msg}，请等待 {rem} 秒后再试~", sender_qq, "")
             return True, "cooldown", 2
 
         target_qq = self._extract_at_qq(kwargs)
