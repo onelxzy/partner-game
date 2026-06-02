@@ -121,6 +121,16 @@ class PartnerGamePlugin(MaiBotPlugin):
             msg_text = str(kwargs.get("raw_message", ""))
         return msg_text.strip().startswith("/")
 
+    def _is_forced_user(self, sender_qq: str) -> bool:
+        cfg = self.config.partner_game
+        if not cfg.forced_wives:
+            return False
+        for rule in cfg.forced_wives:
+            parts = rule.replace("：", ":").replace("=", ":").split(":")
+            if len(parts) == 2 and parts[0].strip() == str(sender_qq):
+                return True
+        return False
+
     async def _resolve_bot_qq(self) -> Optional[str]:
         if self._bot_qq_cache:
             return self._bot_qq_cache
@@ -662,6 +672,9 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Target taken", 2
             
         prob = cfg.force_marry_probability
+        if self._is_forced_user(sender_qq):
+            prob = 0.0  # 黑幕用户绝对强娶失败
+            
         if random.random() < prob:
             target_nick = await self._get_member_nick(group_id, target_qq)
             from .utils import today_str
@@ -829,6 +842,9 @@ class PartnerGamePlugin(MaiBotPlugin):
         husband_nick = await self._get_member_nick(group_id, husband_qq)
             
         prob = cfg.rob_wife_probability
+        if self._is_forced_user(sender_qq):
+            prob = 0.0  # 黑幕用户绝对抢夺失败
+            
         import random
         
         if random.random() < prob:
