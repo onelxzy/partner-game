@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "version": "1.0.0",
+  "name": "今日老婆 Pro",
+  "description": "基于随机抽签演化的群聊伴侣互动游戏系统（支持抽、娶、抢、甩等互动玩法）",
+  "author": {
+    "name": "onelxzy",
+    "url": "https://github.com/onelxzy"
+  },
+  "license": "MIT",
+  "urls": {
+    "repository": "https://github.com/onelxzy/partner-game"
+  },
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.99.99"
+  },
+  "sdk": {
+    "min_version": "2.0.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [
+    {
+      "type": "python_package",
+      "name": "aiohttp",
+      "version_spec": ">=3.9.0"
+    }
+  ],
+  "capabilities": [
+    "config.get",
+    "api.call"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "locales_path": "_locales",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "id": "onelxzy.partner-game"
+}
