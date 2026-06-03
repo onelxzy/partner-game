@@ -14,7 +14,7 @@ class PluginSection(PluginConfigBase):
         json_schema_extra={"label": "启用插件", "order": 0},
     )
     config_version: str = Field(
-        default="1.0.0",
+        default="2.0.0",
         json_schema_extra={"disabled": True, "hidden": True, "label": "配置版本", "order": 99},
     )
 
@@ -40,6 +40,11 @@ class PartnerGameSection(PluginConfigBase):
         default_factory=list,
         description="不受每日一次限制的白名单 QQ 列表。",
         json_schema_extra={"label": "白名单 QQ", "order": 3},
+    )
+    admin_users: List[str] = Field(
+        default_factory=list,
+        description="拥有最高权限的管理员 QQ 列表（可使用 /重置、/全服补偿 等高危指令）。",
+        json_schema_extra={"label": "管理员 QQ", "order": 4},
     )
     tz_offset_hours: int = Field(
         default=8,
@@ -67,14 +72,19 @@ class PartnerGameSection(PluginConfigBase):
         json_schema_extra={"label": "启用持久化", "order": 8},
     )
     force_marry_probability: float = Field(
-        default=0.3,
+        default=0.4,
         description="强娶成功的概率 (0.0 ~ 1.0)。",
         json_schema_extra={"label": "强娶成功概率", "order": 9},
     )
     rob_wife_probability: float = Field(
-        default=0.2,
-        description="抢老婆成功的概率 (0.0 ~ 1.0)。",
-        json_schema_extra={"label": "抢老婆成功概率", "order": 10},
+        default=0.3,
+        description="抢老婆成功的基础概率 (0.0 ~ 1.0)。",
+        json_schema_extra={"label": "抢老婆基础成功率", "order": 10},
+    )
+    rob_money_probability: float = Field(
+        default=0.35,
+        description="打劫金币的基础成功率 (0.0 ~ 1.0)。",
+        json_schema_extra={"label": "打劫金币基础成功率", "order": 11},
     )
     proposal_timeout_seconds: int = Field(
         default=60,

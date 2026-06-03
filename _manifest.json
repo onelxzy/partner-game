@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "今日老婆 Pro",
   "description": "基于随机抽签演化的群聊伴侣互动游戏系统（支持抽、娶、抢、甩等互动玩法）",
   "author": {

@@ -48,12 +48,12 @@ def format_user_display(uid: str, nick: str, card: str) -> str:
     return f"{nick}({uid})"
 
 class PersistStore:
-    """持久化今日抽取记录与离婚使用次数。"""
+    """持久化数据存储。"""
 
     def __init__(self, path: str):
         self.path = path
         self.lock = asyncio.Lock()
-        self.data: Dict[str, Any] = {"daily": {}, "divorce_usage": {}}
+        self.data: Dict[str, Any] = {"marriages": {}, "users": {}, "daily_usage": {}, "last_date": ""}
         self._load_sync()
 
     def _load_sync(self) -> None:
@@ -63,13 +63,19 @@ class PersistStore:
             with open(self.path, "r", encoding="utf-8") as f:
                 d = json.load(f)
                 if isinstance(d, dict):
+                    # 兼容老数据
+                    marriages = d.get("marriages", {})
+                    if not marriages and "daily" in d:
+                        marriages = d.get("daily", {})
                     self.data = {
-                        "daily": d.get("daily", {}) or {},
-                        "divorce_usage": d.get("divorce_usage", {}) or {},
+                        "marriages": marriages,
+                        "users": d.get("users", {}),
+                        "daily_usage": d.get("daily_usage", {}),
+                        "last_date": d.get("last_date", "")
                     }
         except Exception as e:
             logger.error(f"加载持久化失败: {e}")
-            self.data = {"daily": {}, "divorce_usage": {}}
+            self.data = {"marriages": {}, "users": {}, "daily_usage": {}, "last_date": ""}
 
     async def save(self) -> None:
         async with self.lock:
@@ -85,28 +91,10 @@ class PersistStore:
                 logger.error(f"保存持久化失败: {e}")
 
     def purge_old(self, today: str) -> bool:
-        """清理非今日记录，返回是否有改动。"""
-        changed = False
-        daily = self.data.setdefault("daily", {})
-        divorce = self.data.setdefault("divorce_usage", {})
-
-        for gid, members in list(daily.items()):
-            for uid in list(members.keys()):
-                rec = members.get(uid) or {}
-                if rec.get("date") != today:
-                    members.pop(uid, None)
-                    changed = True
-            if not members:
-                daily.pop(gid, None)
-                changed = True
-
-        for gid, usage in list(divorce.items()):
-            for uid in list(usage.keys()):
-                if usage.get(uid) != today:
-                    usage.pop(uid, None)
-                    changed = True
-            if not usage:
-                divorce.pop(gid, None)
-                changed = True
-
-        return changed
+        """跨日重置。返回是否有改动（跨日）。"""
+        last_date = self.data.get("last_date", "")
+        if last_date != today:
+            self.data["daily_usage"] = {}
+            self.data["last_date"] = today
+            return True
+        return False
