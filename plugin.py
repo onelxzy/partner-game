@@ -278,6 +278,13 @@ class PartnerGamePlugin(MaiBotPlugin):
                 chain.append({"type": "image", "data": {"file": f"base64://{b64}"}})
         return await self._send_napcat(int(group_id), chain)
 
+    async def _get_partner_nick(self, group_id: str, marriage: dict) -> str:
+        """解析伴侣昵称，解决老数据或妻子视角的神秘发起人问题。"""
+        nick = marriage.get("partner_nick", "神秘发起人")
+        if nick == "神秘发起人":
+            nick = await self._get_member_nick(group_id, marriage["partner_uid"])
+        return nick
+
     def _get_user_marriage(self, group_id: str, qq: str) -> dict | None:
         marriages = self._store.data.get("marriages", {})
         grp = marriages.get(group_id, {})
@@ -330,6 +337,18 @@ class PartnerGamePlugin(MaiBotPlugin):
             
     def _check_daily_limit(self, group_id: str, qq: str, action: str, limit: int) -> bool:
         """检查今日是否超出限次，未超出则直接+1，并返回True。"""
+        from .utils import today_str
+        import asyncio
+        today = today_str(self.config.partner_game.tz_offset_hours)
+        if self._store.purge_old(today):
+            # 跨日自动增加好感度
+            marriages = self._store.data.setdefault("marriages", {})
+            for g_id, g_m in marriages.items():
+                for h_qq, m_info in g_m.items():
+                    m_info["affection"] = m_info.get("affection", 0) + 5
+            if self.config.partner_game.persist_enabled:
+                asyncio.create_task(self._store.save())
+
         # 某些操作如果是白名单则豁免
         if action in ["partner_game", "divorce", "dump"]:
             cfg = self.config.partner_game
@@ -392,24 +411,13 @@ class PartnerGamePlugin(MaiBotPlugin):
         cfg = self.config.partner_game
         today = today_str(cfg.tz_offset_hours)
 
-        if self._store.purge_old(today) and cfg.persist_enabled:
-            await self._store.save()
-
-        # 跨日自动增加好感度
-        # 我们在这里顺带给群内所有的已婚人士 +5 好感度
-        if self._store.purge_old(today):
-            marriages = self._store.data.setdefault("marriages", {})
-            for g_id, g_m in marriages.items():
-                for h_qq, m_info in g_m.items():
-                    m_info["affection"] = m_info.get("affection", 0) + 5
-
         # 首先不论是否白名单，强制校验不能开后宫
         marriage = self._get_user_marriage(group_id, sender_qq)
         if marriage:
             role = marriage["role"]
-            partner_nick = marriage["partner_nick"]
+            partner_nick = await self._get_partner_nick(group_id, marriage)
             rel_str = "老婆" if role == "husband" else "老公"
-            await self._send_text_at(group_id, sender_qq, f"你已经是【{partner_nick}】的伴侣啦，请好好陪陪你的{rel_str}吧！(可以使用 /逛街 增加好感度)")
+            await self._send_text_at(group_id, sender_qq, f"你已经是【{partner_nick}】的伴侣啦，请好好陪陪你的{rel_str}吧！(可以使用 /约会 增加好感度)")
             return True, "already_wife", 2
 
         # 检查抽取限次
@@ -545,9 +553,6 @@ class PartnerGamePlugin(MaiBotPlugin):
 
         cfg = self.config.partner_game
         today = today_str(cfg.tz_offset_hours)
-
-        if self._store.purge_old(today) and cfg.persist_enabled:
-            await self._store.save()
 
         # 每日限一次
         if not self._check_daily_limit(group_id, sender_qq, "divorce", 1):
@@ -821,7 +826,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 await self._store.save()
                 
             self._set_penalty(group_id, sender_qq, "force_marry", 60)
-            await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处没收作案工具并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
+            await self._send_avatar_msg(group_id, f"强娶失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！\n（其中 {comp} 金币已作为精神损失费赔偿给对方）", sender_qq, target_qq)
             
         return True, "Force Marry Done", 2
 
@@ -1067,7 +1072,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 await self._store.save()
                 
             self._set_penalty(group_id, sender_qq, "rob_wife", 60)
-            await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被没收作案工具并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
+            await self._send_avatar_msg(group_id, f"抢夺失败！你强扭瓜的行为有违风纪，被治安处当场制服并罚款 {fine} 金币，进入1分钟自闭期！{injury_msg}\n（其中 {comp} 金币已作为正当防卫奖励赔偿给原配老公）", sender_qq, husband_qq)
             
         return True, "Rob Wife Done", 2
 
@@ -1211,16 +1216,15 @@ class PartnerGamePlugin(MaiBotPlugin):
             return True, "Target too poor", 2
             
         # 确保有足够的罚款金币
-        if sender_data["money"] < 500:
-            await self._send_avatar_msg(group_id, "你的存款不足 500 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
+        if sender_data["money"] < 300:
+            await self._send_avatar_msg(group_id, "你的存款不足 300 金币，连治安罚款都交不起，还是先去【/打工】吧！", sender_qq, "")
             return True, "No money", 2
 
         # 每日限制 3 次
         cfg = self.config.partner_game
         no_limit_users = [str(x) for x in (cfg.no_limit_users or [])]
         if sender_qq not in no_limit_users:
-            limit_reached, remain = self._check_daily_limit(group_id, sender_qq, "rob_money", 3)
-            if limit_reached:
+            if not self._check_daily_limit(group_id, sender_qq, "rob_money", 3):
                 await self._send_avatar_msg(group_id, "你今天已经打劫太多次了，官府正在通缉你，明天再来吧！", sender_qq, "")
                 return True, "Daily limit", 2
             
@@ -1245,10 +1249,10 @@ class PartnerGamePlugin(MaiBotPlugin):
         target_nick = await self._get_member_nick(group_id, target_qq)
         
         if random.random() < prob:
-            # 抢走 10% ~ 20%
-            ratio = random.uniform(0.10, 0.20)
+            # 抢走 10% ~ 25%
+            ratio = random.uniform(0.10, 0.25)
             stolen = int(target_data["money"] * ratio)
-            stolen = max(50, min(500, stolen))
+            stolen = max(50, min(1500, stolen))
             # 不超过目标实际拥有
             stolen = min(target_data["money"], stolen)
             
@@ -1260,7 +1264,7 @@ class PartnerGamePlugin(MaiBotPlugin):
                 
             await self._send_avatar_msg(group_id, f"打劫成功！【{sender_nick}({sender_qq})】凭借强大的战力威压，从【{target_nick}({target_qq})】身上强行搜刮了 {stolen} 金币！", sender_qq, target_qq)
         else:
-            fine = random.randint(200, 500)
+            fine = random.randint(100, 300)
             comp = fine // 2
             
             target_data["money"] += comp
@@ -1357,7 +1361,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "【互动指令】\n"
             "1. /今日老婆：随机抽取今日缘分。\n"
             "2. /娶 @某人：向心仪的TA求婚。\n"
-            "3. /强娶 @某人：霸王硬上弓，有概率失败受罚（仅扣金币，不涉战力）。\n"
+            "3. /强娶 @某人：霸道宣誓主权，有概率失败受罚（仅扣金币，不涉战力）。\n"
             "4. /抢老婆 @某人：化身黄毛，挑战夫妻共同防守战力！失败可能掉级！\n"
             "5. /打劫 @某人：直接抢钱（每日3次），纯看双方战力差，失败受罚！\n"
             "6. /我的伴侣：查看对象照片。\n"
@@ -1463,7 +1467,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         if self.config.partner_game.persist_enabled:
             await self._store.save()
             
-        partner_nick = marriage["partner_nick"]
+        partner_nick = await self._get_partner_nick(group_id, marriage)
         total_aff = rec["affection"] if rec else add_aff
         await self._send_avatar_msg(group_id, f"你花费 50 金币与【{partner_nick}】去约会，感情升温了！\n好感度 +{add_aff}，当前总好感度：{total_aff}", sender_qq, "")
         return True, "Date done", 2
@@ -1617,7 +1621,7 @@ class PartnerGamePlugin(MaiBotPlugin):
         if self.config.partner_game.persist_enabled:
             await self._store.save()
             
-        partner_nick = marriage["partner_nick"]
+        partner_nick = await self._get_partner_nick(group_id, marriage)
         await self._send_avatar_msg(group_id, f"转账成功！你向【{partner_nick}】上交了 {amount} 金币，对方一定感受到了你的深情厚谊~\n当前余额：{user_data['money']} 金币", sender_qq, partner_uid)
         return True, "Transfer done", 2
 
@@ -1854,7 +1858,7 @@ class PartnerGamePlugin(MaiBotPlugin):
             "😈【互动犯罪机制】\n"
             f"• 强娶：基础概率 {prob_force}%。资金门槛 300，失败罚款 100~300 金币（50%赔给防守方）。\n"
             f"• 抢老婆：基础概率 {prob_rob}%。资金门槛 500，失败罚款 200~500 金币（50%赔给防守方原配），并有20%概率掉级。\n"
-            f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。资金门槛 500，成功抢走目标 10%~20% 资产（最高500）。失败罚款 200~500 金币（50%赔给防守方）。低保户（资产<100）不可被打劫。\n"
+            f"• 打劫金币：基础概率 {getattr(self.config.partner_game, 'rob_money_probability', 0.35)*100}%。资金门槛 300，成功抢走目标 10%~25% 资产（最高1500）。失败罚款 100~300 金币（50%赔给防守方）。低保户（资产<100）不可被打劫。\n"
             "• 犯罪概率浮动公式：\n"
             "  1. 战力压制：采用【底蕴战力=等级×(大境界数+1)】，(进攻方战力 - 防守方最高战力) × 0.5%。\n"
             "  2. 好感抵消（仅限抢老婆）：夫妻好感度每 20 点，减免 1% 成功率。\n"
