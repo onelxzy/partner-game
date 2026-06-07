@@ -54,6 +54,7 @@ class PersistStore:
         self.path = path
         self.lock = asyncio.Lock()
         self.data: Dict[str, Any] = {"marriages": {}, "users": {}, "daily_usage": {}, "last_date": ""}
+        self._save_task: Optional[asyncio.Task] = None
         self._load_sync()
 
     def _load_sync(self) -> None:
@@ -78,6 +79,18 @@ class PersistStore:
             self.data = {"marriages": {}, "users": {}, "daily_usage": {}, "last_date": ""}
 
     async def save(self) -> None:
+        """非阻塞触发保存，使用防抖机制。"""
+        if self._save_task and not self._save_task.done():
+            return
+            
+        async def _delayed_save():
+            await asyncio.sleep(2.0)  # 防抖 2 秒
+            await self.force_save()
+            
+        self._save_task = asyncio.create_task(_delayed_save())
+
+    async def force_save(self) -> None:
+        """强制立即保存并落盘。"""
         async with self.lock:
             def _write():
                 os.makedirs(os.path.dirname(self.path), exist_ok=True)

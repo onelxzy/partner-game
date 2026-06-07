@@ -27,7 +27,12 @@ class PartnerGamePlugin(MaiBotPlugin):
     async def on_unload(self) -> None:
         store = getattr(self, "_store", None)
         if store is not None:
-            await store.save()
+            if hasattr(store, "_save_task") and store._save_task and not store._save_task.done():
+                store._save_task.cancel()
+            if hasattr(store, "force_save"):
+                await store.force_save()
+            else:
+                await store.save()
 
     async def on_config_update(self, scope: str, config_data: dict, version: str) -> None:
         if scope == CONFIG_RELOAD_SCOPE_SELF:
